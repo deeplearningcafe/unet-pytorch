@@ -1,0 +1,21 @@
+unet:
+  input_channels: [64, 128, 256, 512]
+  crop_size: [56, 104, 200, 392]
+  num_classes: 2
+  image_channels: 1
+  dropout: 0.1
+
+train:
+  data: 'data'
+  batch_size: 1
+  scheduler_type: 'warmup-cosine'
+  max_epochs: 100
+  warmup_epochs: 10
+  use_bitsandbytes: True
+  optim: 'adamw'
+  lr: 1e-3
+  device: 'cpu'
+  save_path: 'weights'
+  eval_epoch: 1
+  log_epoch: 1
+  save_epoch: 1

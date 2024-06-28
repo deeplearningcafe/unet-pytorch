@@ -165,17 +165,3 @@ class Unet(nn.Module):
             return out, x, activation_states
         
         return out
-    
-if __name__ == "__main__":
-    path = r"config.yaml"
-    conf = omegaconf.OmegaConf.load(path)
-    model = Unet(conf)
-    # print(model)
-
-    import torchinfo
-    
-    torchinfo.summary(model, (2, 3, 572, 696), depth=5,col_names=["output_size", "num_params", "mult_adds"],)
-    
-    # input = torch.randn((1, 3, 572, 572))
-    # out = model(input)
-    # print(out.shape)

@@ -111,7 +111,7 @@ class ImageTransforms:
         if phase == "train":
             # Random afine
             degrees = random.randint(0, 180)
-            translate = random.uniform(0, 0.2)
+            translate = random.uniform(0, 0.15)
             # print(degrees, translate)
             image = v2.functional.affine(image, angle=degrees, translate=(translate, translate), scale=1.0, shear=0.0)
             mask = v2.functional.affine(mask, angle=degrees, translate=(translate, translate), scale=1.0, shear=0.0)
@@ -123,11 +123,11 @@ class ImageTransforms:
 
             # ElasticTransform
             state = torch.get_rng_state()
-            displacement = v2.ElasticTransform(alpha=75.0)._get_params(image)['displacement']
+            displacement = v2.ElasticTransform(alpha=65.0)._get_params(image)['displacement']
             image = v2.functional.elastic(image, displacement)
             
             torch.set_rng_state(state)
-            displacement = v2.ElasticTransform(alpha=75.0)._get_params(mask)['displacement']
+            displacement = v2.ElasticTransform(alpha=65.0)._get_params(mask)['displacement']
             mask = v2.functional.elastic(mask, displacement)
 
 
@@ -162,7 +162,13 @@ def collate_fn(batch):
     batch = default_collate(batch)
     if batch[0].shape[0] > 1:
         for i in range(len(batch)):
-            batch[i] = batch[i].view(-1, batch[i].shape[2], batch[i].shape[3], batch[i].shape[4])
+            # [1, 4, channels, size, size]
+            if len(batch[i].shape) == 5:
+                batch[i] = batch[i].view(-1, batch[i].shape[2], batch[i].shape[3], batch[i].shape[4])
+            else:
+                # [1, 4, size, size]
+                batch[i] = batch[i].view(-1, batch[i].shape[-2], batch[i].shape[-1])
+
     else:
         # in the case of only 1 batch then we have the 4 samples, but default_collate adds a batch dim
         for i in range(len(batch)):
@@ -172,8 +178,8 @@ def collate_fn(batch):
 
 
 def create_train_val_lists(data_path:str, ratio:float=0.9):
-    img_path = f"{data_path}\images"
-    label_path = f"{data_path}\labels"
+    img_path = f"{data_path}/images"
+    label_path = f"{data_path}/labels"
     img_list = [os.path.join(img_path, file) for file in os.listdir(img_path)]
     label_list = [os.path.join(label_path, file) for file in os.listdir(label_path)]
 
@@ -209,3 +215,5 @@ def prepare_data(conf:omegaconf.DictConfig):
     return train_loader, val_loader, train_data, val_data
 
 
+# def prepare_test_data(conf:omegaconf.DictConfig):
+    

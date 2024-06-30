@@ -8,7 +8,7 @@ def create_scheduler(optim:torch.optim.Optimizer, conf:omegaconf.DictConfig):
     
     if scheduler_type == "warmup-cosine":
         scheduler_warmp = torch.optim.lr_scheduler.LinearLR(optim, start_factor=0.1, end_factor=1.0, total_iters=conf.train.warmup_epochs)
-        scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=conf.train.max_epochs, eta_min=conf.train.lr*1e-2)
+        scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=conf.train.max_epochs, eta_min=conf.train.lr*5e-2)
         scheduler = torch.optim.lr_scheduler.SequentialLR(optim, schedulers=[scheduler_warmp, scheduler_cosine],
                                                           milestones=[conf.train.warmup_epochs])
     elif scheduler_type == "wsd":
@@ -52,6 +52,23 @@ def weights_init(m):
         if m.bias is not None:  # バイアス項がある場合
             torch.nn.init.constant_(m.bias, 0.0)
 
+
+def get_update_ratio(model, layers:dict[str, torch.tensor], diffs: dict[str, list]):
+    # we have the layers dict that stores the weights and the diffs dict that stores a list with the diff in each step
+    # dict are not in place so we need to create a new one
+    tmp_dict = {}
+    
+    for key, layer in layers.items():
+        for name, param in model.named_parameters():
+            if key in name.split('.'):
+                with torch.no_grad():
+                    param_clone = param.detach().cpu().clone()
+                    change = param_clone-layer
+                    diffs[key].append((change.std()/param.std()).log10().item())
+                    tmp_dict[key] = param_clone
+
+    return tmp_dict, diffs
+
 def prepare_training(conf:omegaconf.DictConfig):
     
     model = unet.Unet(conf)
@@ -60,10 +77,17 @@ def prepare_training(conf:omegaconf.DictConfig):
     model = model.to(conf.train.device)
     model.train()
     
-    
-    optim, scheduler = create_optim(model, conf)
-    
+    optim, scheduler = create_optim(model, conf)    
     loss_fn = torch.nn.CrossEntropyLoss(reduction="none")
-
     
     return model, optim, scheduler, loss_fn
+
+def prepare_test(conf:omegaconf.DictConfig):
+    
+    model = unet.Unet(conf)
+    net_weights = torch.load(r''.join(conf.inference.checkpoint),
+                         map_location={'cuda:0': 'cpu'})
+    model.load_state_dict(net_weights)
+    model = model.to(conf.train.device)
+    model.eval()
+    return model

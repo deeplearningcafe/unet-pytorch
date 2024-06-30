@@ -9,13 +9,23 @@ train:
   data: 'data'
   batch_size: 1
   scheduler_type: 'warmup-cosine'
-  max_epochs: 100
+  max_epochs: 50
   warmup_epochs: 10
   use_bitsandbytes: True
   optim: 'adamw'
-  lr: 1e-3
-  device: 'cpu'
+  lr: 2e-4
+  device: 'cuda'
   save_path: 'weights'
   eval_epoch: 1
   log_epoch: 1
-  save_epoch: 1
+  save_epoch: 3
+  log_path: 'logs'
+
+inference:
+  checkpoint: 'weights\unet_34.pth'
+
+overfit_one_batch:
+  tolerance: 1e-5
+  max_steps: 250
+  overfit: False
+  hp_search: False

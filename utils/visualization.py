@@ -58,7 +58,7 @@ def plot_gradients(layers_list:list[str], model:torch.nn.Module):
 
 def plot_predictions(outputs: torch.tensor, labels:  torch.tensor, save_path:str='', epoch:int=0):
 
-    fig = plt.figure(figsize=(12, 12))
+    fig = plt.figure(figsize=(8, 14))
     
     for i in range(0, 8, 2):
         output_img = torch.argmax(outputs[int(i/2)], dim=0)

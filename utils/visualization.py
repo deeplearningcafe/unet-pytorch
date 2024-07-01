@@ -58,18 +58,41 @@ def plot_gradients(layers_list:list[str], model:torch.nn.Module):
 
 def plot_predictions(outputs: torch.tensor, labels:  torch.tensor, save_path:str='', epoch:int=0):
 
-    fig = plt.figure(figsize=(8, 14))
+    fig = plt.figure(figsize=(14, 16))
     
-    for i in range(0, 8, 2):
-        output_img = torch.argmax(outputs[int(i/2)], dim=0)
-        ax = fig.add_subplot(4, 2, i+1)
+    for i in range(0, 16, 4):
+        ax = fig.add_subplot(4, 4, i+1)
+        shw = ax.imshow(outputs[int(i/4)][0])
+        bar = plt.colorbar(shw)
+        
+        ax = fig.add_subplot(4, 4, i+2)
+        
+        shw = ax.imshow(outputs[int(i/4)][1])
+        bar = plt.colorbar(shw)
+
+        ax = fig.add_subplot(4, 4, i+3)
+        output_img = torch.argmax(outputs[int(i/4)], dim=0)
+
         shw = ax.imshow(np.array(output_img))
         bar = plt.colorbar(shw)
         
-        ax = fig.add_subplot(4, 2, i+2)
+        ax = fig.add_subplot(4, 4, i+4)
         
-        shw = ax.imshow(np.array(labels[int(i/2)]))
+        shw = ax.imshow(np.array(labels[int(i/4)]))
         bar = plt.colorbar(shw)
+
+
+
+
+        # output_img = torch.argmax(outputs[int(i/2)], dim=0)
+        # ax = fig.add_subplot(4, 2, i+1)
+        # shw = ax.imshow(np.array(output_img))
+        # bar = plt.colorbar(shw)
+        
+        # ax = fig.add_subplot(4, 2, i+2)
+        
+        # shw = ax.imshow(np.array(labels[int(i/2)]))
+        # bar = plt.colorbar(shw)
     if len(save_path) > 1:
         plt.savefig(f"{save_path}\epoch_{epoch}.png")
     else:

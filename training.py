@@ -66,9 +66,9 @@ def compute_weight_classes(mask):
     # Initialize the weight map with zeros, same shape as mask
     wc = np.zeros_like(mask, dtype=np.float32)
     
-    # Calculate class frequencies
-    class_0 = np.sum(mask == 0) / (mask.shape[0] * mask.shape[1])
-    class_1 = np.sum(mask == 1) / (mask.shape[0] * mask.shape[1])
+    # Calculate class frequencies, we need to divide the number of classes by the dimensions (388 * 388)
+    class_0 = np.sum(mask == 0) / (mask.shape[1] * mask.shape[2])
+    class_1 = np.sum(mask == 1) / (mask.shape[1] * mask.shape[2])
     class_frequencies = np.array([class_0, class_1], dtype=np.float32)
     
     # Assign weights based on class frequencies
@@ -117,10 +117,11 @@ def train(model: torch.nn.Module,
             # as the weigth implementation is just mult, we will compute without weight and then mult
             # in this case the reduction has to be "none" so that we can multiply by the weights            
             loss = loss_fn(output, label)
-            with torch.no_grad():
-                wc = compute_weight_classes(label.detach().cpu().numpy())
-                weight_map = torch.from_numpy(compute_weight_map(label, wc)).to(conf.train.device)
-                loss *= weight_map
+            # with torch.no_grad():
+            wc = compute_weight_classes(label.detach().cpu().numpy())
+            # by default tensors don't have grad
+            weight_map = torch.from_numpy(compute_weight_map(label, wc)).to(conf.train.device)
+            loss *= weight_map
             
             # print(loss[0])
             loss = torch.mean(loss)
@@ -158,23 +159,23 @@ def train(model: torch.nn.Module,
                     
                     # the validation samples are always the same and in the same order so we can store the loss weights
                     loss = loss_fn(output, label)
-                    with torch.no_grad():
-                        if len(val_loss_weights) == len(val_loader):
-                            # for i in range(len(val_loss_weights)):
-                            # wc = compute_weight_classes(label.detach().cpu().numpy())
-                            # weight_map = torch.from_numpy(compute_weight_map(label, wc)).to(conf.train.device)
-                            # print(torch.all(val_loss_weights[i][0]==weight_map[0]))
-                            # print(torch.sum(abs(val_loss_weights[i][0] - weight_map[0])))
-                            # print(torch.all(val_labels[i] == label))
-                            # print(weight_map.shape, val_loss_weights[i].shape)
-                            loss *= val_loss_weights[i]
-                        else:
-                            # val_labels.append(label)
-                            label_cpu = label.detach().cpu().numpy()
-                            wc = compute_weight_classes(label_cpu)
-                            weight_map = torch.from_numpy(compute_weight_map(label, wc)).to(conf.train.device)
-                            val_loss_weights.append(weight_map)
-                            loss *= weight_map
+                    # with torch.no_grad():
+                    if len(val_loss_weights) == len(val_loader):
+                        # for i in range(len(val_loss_weights)):
+                        # wc = compute_weight_classes(label.detach().cpu().numpy())
+                        # weight_map = torch.from_numpy(compute_weight_map(label, wc)).to(conf.train.device)
+                        # print(torch.all(val_loss_weights[i][0]==weight_map[0]))
+                        # print(torch.sum(abs(val_loss_weights[i][0] - weight_map[0])))
+                        # print(torch.all(val_labels[i] == label))
+                        # print(weight_map.shape, val_loss_weights[i].shape)
+                        loss *= val_loss_weights[i]
+                    else:
+                        # val_labels.append(label)
+                        label_cpu = label.detach().cpu().numpy()
+                        wc = compute_weight_classes(label_cpu)
+                        weight_map = torch.from_numpy(compute_weight_map(label, wc)).to(conf.train.device)
+                        val_loss_weights.append(weight_map)
+                        loss *= weight_map
 
                     loss = torch.mean(loss)
                     val_losses += loss.item()
@@ -238,8 +239,8 @@ def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.D
         output = model(img)
         
         loss = loss_fn(output, label)
-        with torch.no_grad():
-            loss *= weight_map
+        # with torch.no_grad():
+        loss *= weight_map
             
         loss = torch.mean(loss)
         losses.append(loss.item())

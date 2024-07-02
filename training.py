@@ -32,10 +32,10 @@ torch.manual_seed(46)
 # data input is monochrome and labels have are 0, 1 each pixel.
 
 
-def compute_weight_map(mask, w_c, w0=12.5, sigma=5):
+def compute_weight_map(mask, w_c, w0=4.5, sigma=5):
     # Compute the distance transform
     distances = ndimage.distance_transform_edt(mask.detach().cpu().numpy() == 0).astype(np.float32)
-    distances_max = 30
+    distances_max = 25
     distances = np.clip(distances, 0, distances_max)
     # mask the positive values so that they have max distance, as small distance means higher loss
     distances[distances==0.0] = distances_max
@@ -104,7 +104,7 @@ def train(model: torch.nn.Module,
     if os.path.isdir(img_path) == False:
         os.makedirs(img_path)
         
-    log_path = f"{conf.train.log_path}\log_output_{datetime.now().strftime(r'%Y%m%d-%H%M%S')}.csv"
+    log_path = os.path.join(conf.train.log_path, f"log_output_{datetime.now().strftime(r'%Y%m%d-%H%M%S')}.csv")
     # val_labels = []
     
     while current_epoch < epochs:
@@ -174,15 +174,17 @@ def train(model: torch.nn.Module,
                         # val_labels.append(label)
                         label_cpu = label.detach().cpu().numpy()
                         wc = compute_weight_classes(label_cpu)
-                        weight_map = torch.from_numpy(compute_weight_map(label, wc)).to(conf.train.device)
+                        weight_map_numpy = compute_weight_map(label, wc)
+                        weight_map = torch.from_numpy(weight_map_numpy).to(conf.train.device)
                         val_loss_weights.append(weight_map)
                         loss *= weight_map
 
-                    loss = torch.mean(loss)
-                    val_losses += loss.item()
+                    loss_mean = torch.mean(loss)
+                    val_losses += loss_mean.item()
                 
-                # save outputs img
+                # save outputs img, of the last batch of validation
                 utils.visualization.plot_predictions(output.detach().cpu(), label_cpu, save_path=img_path, epoch=current_epoch)
+                utils.visualization.plot_loss_weights(weight_map_numpy, loss.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch)
         
         if current_epoch % conf.train.log_epoch == 0:
             # we want the loss per step so we divide by the num of steps that have been accumulated

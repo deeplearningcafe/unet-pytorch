@@ -104,3 +104,21 @@ def plot_weight_map(weight_map:torch.tensor):
     plt.imshow(weight_map[0], cmap='hot', interpolation='nearest')
     plt.colorbar()
     plt.show()
+
+def plot_loss_weights(weight_maps:np.ndarray, loss:np.ndarray, save_path:str='', epoch:int=0):
+    fig = plt.figure(figsize=(10, 14))
+
+    # we assume already np.ndarray
+    for i in range(0, 8, 2):
+        ax = fig.add_subplot(4, 2, i+1)
+        shw = plt.imshow(np.array(weight_maps[int(i/2)]), cmap='hot', interpolation='nearest')
+        bar = plt.colorbar(shw)
+        
+        ax = fig.add_subplot(4, 2, i+2)
+        
+        clipped_loss = np.clip(loss[int(i/2)].detach().numpy(), 0, 15)
+        shw = ax.imshow(clipped_loss)
+        bar = plt.colorbar(shw)
+
+    save_path = os.path.join(save_path, f"epoch_{epoch}_loss_weights.png")
+    plt.savefig(save_path)

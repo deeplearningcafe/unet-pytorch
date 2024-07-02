@@ -32,7 +32,7 @@ torch.manual_seed(46)
 # data input is monochrome and labels have are 0, 1 each pixel.
 
 
-def compute_weight_map(mask, w_c, w0=25.5, sigma=5):
+def compute_weight_map(mask, w_c, w0=12.5, sigma=5):
     # Compute the distance transform
     distances = ndimage.distance_transform_edt(mask.detach().cpu().numpy() == 0).astype(np.float32)
     distances_max = 30
@@ -67,6 +67,7 @@ def compute_weight_classes(mask):
     wc = np.zeros_like(mask, dtype=np.float32)
     
     # Calculate class frequencies, we need to divide the number of classes by the dimensions (388 * 388)
+    # we can update this code to compute the weights for each image in the batch
     class_0 = np.sum(mask == 0) / (mask.shape[1] * mask.shape[2])
     class_1 = np.sum(mask == 1) / (mask.shape[1] * mask.shape[2])
     class_frequencies = np.array([class_0, class_1], dtype=np.float32)

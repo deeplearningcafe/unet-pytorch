@@ -116,7 +116,7 @@ def plot_loss_weights(weight_maps:np.ndarray, loss:np.ndarray, save_path:str='',
         
         ax = fig.add_subplot(4, 2, i+2)
         
-        clipped_loss = np.clip(loss[int(i/2)].detach().numpy(), 0, 15)
+        clipped_loss = np.clip(loss[int(i/2)], 0, 15)
         shw = ax.imshow(clipped_loss)
         bar = plt.colorbar(shw)
 

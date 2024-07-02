@@ -40,12 +40,6 @@ def compute_weight_map(mask, w_c, w0=4.5, sigma=5):
     # mask the positive values so that they have max distance, as small distance means higher loss
     distances[distances==0.0] = distances_max
 
-    # print(distances.shape)
-    # Find the two largest distances (d1 and d2) at each pixel
-    # sorted_distances = np.sort(distances.flatten())[::-1]
-    # d1 = sorted_distances[0]
-    # d2 = sorted_distances[1]
-    # print(d1, d2)
     # Compute the weight map
     weight_map = w_c + w0 * np.exp(-((distances + distances) ** 2) / (2 * sigma ** 2))
     # print(w0 * np.exp(-((distances + distances) ** 2) / (2 * sigma ** 2)))
@@ -66,18 +60,16 @@ def compute_weight_classes(mask):
     # Initialize the weight map with zeros, same shape as mask
     wc = np.zeros_like(mask, dtype=np.float32)
     
-    # Calculate class frequencies, we need to divide the number of classes by the dimensions (388 * 388)
-    # we can update this code to compute the weights for each image in the batch
-    class_0 = np.sum(mask == 0) / (mask.shape[1] * mask.shape[2])
-    class_1 = np.sum(mask == 1) / (mask.shape[1] * mask.shape[2])
+    # Calculate class frequencies
+    class_0 = np.sum(mask == 0) / (mask.shape[0] * mask.shape[1] * mask.shape[2])
+    class_1 = np.sum(mask == 1) / (mask.shape[0] * mask.shape[1] * mask.shape[2])
     class_frequencies = np.array([class_0, class_1], dtype=np.float32)
     
     # Assign weights based on class frequencies
     for label, freq in enumerate(class_frequencies):
         wc[mask == label] = 1.0 / freq if freq > 0 else 0
     
-    return wc
-
+    return wc, class_frequencies
 
 def train(model: torch.nn.Module, 
             train_loader: torch.utils.data.DataLoader,
@@ -128,7 +120,7 @@ def train(model: torch.nn.Module,
             loss = torch.mean(loss)
             
             train_losses += loss.item()
-            
+            print(loss.item())
             # backward
             optimizer.zero_grad()
             loss.backward()

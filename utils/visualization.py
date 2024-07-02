@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
+import os
 
 def plot_logs(logs_path:str):
     df = pd.read_csv(r"".join(logs_path))
@@ -94,7 +95,8 @@ def plot_predictions(outputs: torch.tensor, labels:  torch.tensor, save_path:str
         # shw = ax.imshow(np.array(labels[int(i/2)]))
         # bar = plt.colorbar(shw)
     if len(save_path) > 1:
-        plt.savefig(f"{save_path}\epoch_{epoch}.png")
+        save_path = os.path.join(save_path, f"epoch_{epoch}.png")
+        plt.savefig(save_path)
     else:
         plt.show()
     

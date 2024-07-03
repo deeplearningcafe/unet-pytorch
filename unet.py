@@ -39,17 +39,19 @@ class conv_block_pooling(nn.Module):
         self.pooling = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         
     def forward(self, x: torch.tensor, output_activation_state:bool=False):
+        x = self.pooling(x)
+
         if output_activation_state:
-            x, x_activation_1 = self.conv_block(x, True)
+            out, x_activation_1 = self.conv_block(x, True)
         else:
-            x = self.conv_block(x)
+            out = self.conv_block(x)
             
-        out = self.pooling(x)
+        
         
         if output_activation_state:
-            return out, x, x_activation_1
+            return out,  x_activation_1
         
-        return out, x
+        return out
 
 # expansive block
 class conv_block_upsample(nn.Module):
@@ -59,50 +61,10 @@ class conv_block_upsample(nn.Module):
         self.conv_block = conv_relu_block(in_channels, out_channels)
         
         # channels are reduced in the first conv
-        self.upsampling = nn.ConvTranspose2d(in_channels=out_channels, out_channels=out_channels//2, 
+        self.upsampling = nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, 
                                              kernel_size=2, stride=2, padding=0)
-        
-    def forward(self, x: torch.tensor, output_activation_state:bool=False):
-        # we assume the other layer output has already being concatenated
-        if output_activation_state:
-            x_activation_2, x_activation_1 = self.conv_block(x, True)
-        else:
-            x_activation_2 = self.conv_block(x)
-            
-        x = self.upsampling(x_activation_2)
-        
-        if output_activation_state:
-            return x, x_activation_2, x_activation_1
-        
-        return x
+    
 
-
-class Unet(nn.Module):
-    def __init__(self, conf: omegaconf.DictConfig) -> None:
-        super(Unet, self).__init__()
-        self.conf = conf
-        
-        self.contracting = nn.ModuleList()
-        self.contracting.append(conv_block_pooling(self.conf.unet.image_channels, self.conf.unet.input_channels[0]))
-
-        for in_channels  in self.conf.unet.input_channels[:-1]:
-            out_channels = in_channels*2
-            self.contracting.append(conv_block_pooling(in_channels, out_channels))
-        
-        self.expansive = nn.ModuleList()
-        self.expansive.append(conv_block_upsample(self.conf.unet.input_channels[-1], self.conf.unet.input_channels[-1]*2))
-
-        reversed_channels = list(reversed(self.conf.unet.input_channels))
-        for out_channels  in reversed_channels[:-1]:
-            in_channels = int(out_channels*2)
-            self.expansive.append(conv_block_upsample(in_channels, out_channels))
-
-        self.expansive.append(conv_relu_block(reversed_channels[-1]*2, reversed_channels[-1]))
-        self.final_conv = nn.Conv2d(in_channels=self.conf.unet.input_channels[0], out_channels=conf.unet.num_classes, 
-                                    kernel_size=1, stride=1, padding=0)
-        
-        self.dropout = nn.Dropout(p=conf.unet.dropout)
-        
     def crop_tensor(self, x: torch.tensor, input_size:int):
         # we have that with each convolution, the size is reduced by 2 and conv are in blocks of 2
         # in the first crop it is from 64 to 56, second is from 136 to 104. First 8=2^3 and then 32=2^5
@@ -111,6 +73,53 @@ class Unet(nn.Module):
         x = x[:, :, crop_pixels:-crop_pixels, crop_pixels:-crop_pixels]
         # print(f"Size after cropping {x.shape}")
         return x
+
+
+    def forward(self, x: torch.tensor, downsample_x:torch.tensor, output_activation_state:bool=False):
+
+        x = self.upsampling(x)
+        downsample_x = self.crop_tensor(downsample_x, x.shape[2])
+
+        x = torch.cat([downsample_x, x], dim=1)
+        # we assume the other layer output has already being concatenated
+        if output_activation_state:
+            x_activation_2, x_activation_1 = self.conv_block(x, True)
+        else:
+            x_activation_2 = self.conv_block(x)
+            
+        
+        
+        if output_activation_state:
+            return x_activation_2, x_activation_1
+        
+        return x_activation_2
+
+
+class Unet(nn.Module):
+    def __init__(self, conf: omegaconf.DictConfig) -> None:
+        super(Unet, self).__init__()
+        self.conf = conf
+        
+        self.contracting = nn.ModuleList()
+        self.contracting.append(conv_relu_block(self.conf.unet.image_channels, self.conf.unet.input_channels[0]))
+
+        for in_channels  in self.conf.unet.input_channels:
+            out_channels = in_channels*2
+            self.contracting.append(conv_block_pooling(in_channels, out_channels))
+        
+        self.expansive = nn.ModuleList()
+        # self.expansive.append(conv_block_upsample(self.conf.unet.input_channels[-1], self.conf.unet.input_channels[-1]*2))
+
+        reversed_channels = list(reversed(self.conf.unet.input_channels))
+        for out_channels  in reversed_channels:
+            in_channels = int(out_channels*2)
+            self.expansive.append(conv_block_upsample(in_channels, out_channels))
+
+        # self.expansive.append(conv_relu_block(reversed_channels[-1]*2, reversed_channels[-1]))
+        self.final_conv = nn.Conv2d(in_channels=self.conf.unet.input_channels[0], out_channels=conf.unet.num_classes, 
+                                    kernel_size=1, stride=1, padding=0)
+        
+        self.dropout = nn.Dropout(p=conf.unet.dropout)
     
     def forward(self, x: torch.tensor, is_debug:bool=False):
 
@@ -120,44 +129,26 @@ class Unet(nn.Module):
         # loop all the downsampling steps
         for i in range(len(self.contracting)):
             if is_debug:
-                x, pre_out, x_activation_1 = self.contracting[i](x, True)
-                activation_states.append({f"down_layer_{i}": [pre_out, x_activation_1]})
+                x, x_activation_1 = self.contracting[i](x, True)
+                activation_states.append({f"down_layer_{i}": [x, x_activation_1]})
             else:
-                x, pre_out = self.contracting[i](x)
+                x = self.contracting[i](x)
             
             # print(x.shape, pre_out.shape)
-            outputs.append(pre_out)
+            # the last layer output is the 1024 channel so we don't need to store it
+            if i != len(self.contracting)-1:
+                outputs.append(x)
         
         # "Drop-out layers at the end of the contracting path"
         x = self.dropout(x)
         
         # start the upsampling
         for i in range(len(self.expansive)):
-            if i == 0:
-                # in the first upsample, there is no need to crop and copy
-                if is_debug:
-                    x, x_activation_2, x_activation_1 = self.expansive[i](x, True)
-                    activation_states.append({f"up_layer_{i}": [x_activation_2, x_activation_1]})
-                else:    
-                    x = self.expansive[i](x)
-            elif i != len(self.expansive)-1:
-                # print(x.shape, outputs[-i].shape)
-                x = torch.cat([self.crop_tensor(outputs[-i], x.shape[2]), x], dim=1)
-                if is_debug:
-                    x, x_activation_2, x_activation_1 = self.expansive[i](x, True)
-                    activation_states.append({f"up_layer_{i}": [x_activation_2, x_activation_1]})
-                else:
-                    x = self.expansive[i](x)
+            if is_debug:
+                x, x_activation_1 = self.expansive[i](x, outputs[-(i+1)], True)
+                activation_states.append({f"up_layer_{i}": [x, x_activation_1]})
             else:
-                # we do the last stage separately as only 2 outputs in the debug case
-                # print(x.shape, outputs[-i].shape)
-                x = torch.cat([self.crop_tensor(outputs[-i], x.shape[2]), x], dim=1)
-                if is_debug:
-                    x, x_activation_1 = self.expansive[i](x, True)
-                    activation_states.append({f"up_layer_{i}": [x, x_activation_1]})
-                else:
-                    x = self.expansive[i](x)
-
+                x = self.expansive[i](x, outputs[-(i+1)], False)
          
         out = self.final_conv(x)
         

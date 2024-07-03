@@ -113,7 +113,7 @@ def train(model: torch.nn.Module,
             # with torch.no_grad():
             wc = compute_weight_classes(label.detach().cpu().numpy())
             # by default tensors don't have grad
-            weight_map = torch.from_numpy(compute_weight_map(label, wc)).to(conf.train.device)
+            weight_map = torch.from_numpy(compute_weight_map(label, wc, w0=conf.train.w_0)).to(conf.train.device)
             loss *= weight_map
             
             # print(loss[0])
@@ -166,7 +166,7 @@ def train(model: torch.nn.Module,
                         # val_labels.append(label)
                         label_cpu = label.detach().cpu().numpy()
                         wc = compute_weight_classes(label_cpu)
-                        weight_map_numpy = compute_weight_map(label, wc)
+                        weight_map_numpy = compute_weight_map(label, wc, w0=conf.train.w_0)
                         weight_map = torch.from_numpy(weight_map_numpy).to(conf.train.device)
                         val_loss_weights.append(weight_map)
                         loss *= weight_map
@@ -283,7 +283,7 @@ def grid_search(train_loader, val_loader, conf:omegaconf.DictConfig):
     parameters = ["warmup", "max_lr", "w_0"]
 
     param_list = []
-    warmup_list = [5*factor for factor in range(2, 3)]
+    warmup_list = [10*factor for factor in range(2, 3)]
     lr_list = [1e-4]
     w_0_list = [2.0, 2.5, 3.0, 3.5, 4.0]
     
@@ -298,17 +298,20 @@ def grid_search(train_loader, val_loader, conf:omegaconf.DictConfig):
     for param in parameters:
         logs[param] = []
         
+    conf.unet.input_channels[:] = [channel//2 for channel in conf.unet.input_channels]
     for param in param_list:
         conf.train.warmup_epochs = int(param[0])
         text = f"Evaluating warmup steps: {conf.train.warmup_epochs}"
 
-        if len(param) == 2:
-            conf.train.lr = param[1]
-            text += f" and max_lr of {conf.train.lr}"
+        # if len(param) == 2:
+        conf.train.lr = param[1]
+        text += f" and max_lr of {conf.train.lr}"
         
-        text += f" and w?0 of {param[2]}"
+        conf.train.w_0 = param[2]
+        text += f" and w_0 of {param[2]}"
         print(text)
         
+
         model, optim, scheduler, loss_fn = prepare_training(conf)
         if conf.overfit_one_batch.full_train:
             logs_one_comb = train(model, train_loader, val_loader, optim, scheduler, loss_fn, conf)
@@ -338,7 +341,7 @@ def main(conf: omegaconf.DictConfig):
         grid_search(train_loader, val_loader, conf)
     elif conf.overfit_one_batch.overfit:
         batch = next(iter(train_loader))
-        overfit_one_batch(model, batch, optim, scheduler, conf, output_log=True, save_update_ratio=True)
+        overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf, output_log=True, save_update_ratio=True)
 
     else:
         # each time we sample from the dataset, different transforms are applied

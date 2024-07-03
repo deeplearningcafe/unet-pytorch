@@ -12,7 +12,7 @@ from training import compute_weight_classes, compute_weight_map
 def debug_inference(model, batch:torch.tensor):
     output, last_hidden_state, activation_states = model(batch[0], is_debug=True)
     
-    utils.visualization.plot_predictions(output, batch[1])
+    utils.visualization.plot_predictions(output.detach().cpu().numpy(), batch[1].detach().cpu().numpy())
     print("*"*50)
     
     loss_fn = torch.nn.CrossEntropyLoss(reduction="none")
@@ -27,7 +27,7 @@ def debug_inference(model, batch:torch.tensor):
     print(loss)
     print("*"*50)
     
-    utils.visualization.plot_weight_map(weight_map)
+    utils.visualization.plot_weight_map(weight_map.detach().cpu().numpy())
     print(f"Min of weight map: {weight_map.min()}, Max of weight map: {weight_map.max()}")
     print("*"*50)
     

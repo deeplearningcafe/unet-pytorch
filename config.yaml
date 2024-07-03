@@ -20,7 +20,8 @@ train:
   log_epoch: 1
   save_epoch: 3
   log_path: 'logs'
-
+  early_stopping: 15
+  
 inference:
   checkpoint: 'weights\unet_34.pth'
 
@@ -29,3 +30,4 @@ overfit_one_batch:
   max_steps: 250
   overfit: False
   hp_search: False
+  full_train: True

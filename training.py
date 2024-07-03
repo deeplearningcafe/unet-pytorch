@@ -32,7 +32,7 @@ torch.manual_seed(46)
 # data input is monochrome and labels have are 0, 1 each pixel.
 
 
-def compute_weight_map(mask, w_c, w0=4.5, sigma=5):
+def compute_weight_map(mask, w_c, w0=3.5, sigma=5):
     # Compute the distance transform
     distances = ndimage.distance_transform_edt(mask.detach().cpu().numpy() == 0).astype(np.float32)
     distances_max = 25
@@ -69,7 +69,7 @@ def compute_weight_classes(mask):
     for label, freq in enumerate(class_frequencies):
         wc[mask == label] = 1.0 / freq if freq > 0 else 0
     
-    return wc, class_frequencies
+    return wc
 
 def train(model: torch.nn.Module, 
             train_loader: torch.utils.data.DataLoader,
@@ -99,7 +99,7 @@ def train(model: torch.nn.Module,
     log_path = os.path.join(conf.train.log_path, f"log_output_{datetime.now().strftime(r'%Y%m%d-%H%M%S')}.csv")
     # val_labels = []
     
-    while current_epoch < epochs:
+    while current_epoch < epochs and current_epoch < conf.train.early_stopping:
         for img, label in train_loader:
             img = img.to(conf.train.device)
             label = label.to(conf.train.device)
@@ -210,6 +210,7 @@ def train(model: torch.nn.Module,
         pbar.update(1)
         
     print("Finished Training!")
+    return logs
 
 def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.DictConfig, output_log:bool=True, save_update_ratio:bool=False):
     img = batch[0].to(conf.train.device)
@@ -277,14 +278,14 @@ def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.D
     return logs
 
 
-def grid_search(batch, conf:omegaconf.DictConfig):
+def grid_search(train_loader, val_loader, conf:omegaconf.DictConfig):
     logs = {'losses': [], "gradient_norm": [], "learning_rate": []}
     parameters = ["warmup", "max_lr", "w_0"]
 
     param_list = []
-    warmup_list = [5*factor for factor in range(1, 3)]
-    lr_list = [1e-3, 1e-4]
-    w_0_list = [9.0, 10.5, 12.0]
+    warmup_list = [5*factor for factor in range(2, 3)]
+    lr_list = [1e-4]
+    w_0_list = [2.0, 2.5, 3.0, 3.5, 4.0]
     
     for i in range(len(warmup_list)):
         for j in range(len(lr_list)):
@@ -309,7 +310,12 @@ def grid_search(batch, conf:omegaconf.DictConfig):
         print(text)
         
         model, optim, scheduler, loss_fn = prepare_training(conf)
-        logs_one_comb = overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf, output_log=True, save_update_ratio=False)
+        if conf.overfit_one_batch.full_train:
+            logs_one_comb = train(model, train_loader, val_loader, optim, scheduler, loss_fn, conf)
+        else:
+            batch = next(iter(train_loader))
+            logs_one_comb = overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf, output_log=True, save_update_ratio=False)
+        
         logs_one_comb["warmup"] = [int(param[0])] * len(logs_one_comb["losses"])
         # if len(param) == 2:
         logs_one_comb["max_lr"] = [param[1]] * len(logs_one_comb["losses"])
@@ -329,8 +335,7 @@ def main(conf: omegaconf.DictConfig):
     train_loader, val_loader, train_data, val_data = prepare_data(conf)
     
     if conf.overfit_one_batch.hp_search:
-        batch = next(iter(train_loader))
-        grid_search(batch, conf)
+        grid_search(train_loader, val_loader, conf)
     elif conf.overfit_one_batch.overfit:
         batch = next(iter(train_loader))
         overfit_one_batch(model, batch, optim, scheduler, conf, output_log=True, save_update_ratio=True)

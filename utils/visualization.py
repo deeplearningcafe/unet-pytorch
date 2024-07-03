@@ -40,6 +40,7 @@ def plot_activation_layer(activations_array: list[dict]):
     plt.legend(legends);
     plt.title('activation distribution')
     plt.show()
+    plt.close()
     
 def plot_gradients(layers_list:list[str], model:torch.nn.Module):
     plt.figure(figsize=(20, 4)) # width and height of the plot
@@ -55,7 +56,7 @@ def plot_gradients(layers_list:list[str], model:torch.nn.Module):
     plt.legend(legends)
     plt.title('weights gradient distribution')
     plt.show()
-
+    plt.close()
 
 def plot_predictions(outputs: torch.tensor, labels:  torch.tensor, save_path:str='', epoch:int=0):
 
@@ -99,11 +100,13 @@ def plot_predictions(outputs: torch.tensor, labels:  torch.tensor, save_path:str
         plt.savefig(save_path)
     else:
         plt.show()
+    plt.close()
     
 def plot_weight_map(weight_map:torch.tensor):
     plt.imshow(weight_map[0], cmap='hot', interpolation='nearest')
     plt.colorbar()
     plt.show()
+    plt.close()
 
 def plot_loss_weights(weight_maps:np.ndarray, loss:np.ndarray, save_path:str='', epoch:int=0):
     fig = plt.figure(figsize=(10, 14))
@@ -122,3 +125,4 @@ def plot_loss_weights(weight_maps:np.ndarray, loss:np.ndarray, save_path:str='',
 
     save_path = os.path.join(save_path, f"epoch_{epoch}_loss_weights.png")
     plt.savefig(save_path)
+    plt.close()

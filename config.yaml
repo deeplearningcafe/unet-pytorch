@@ -1,6 +1,5 @@
 unet:
   input_channels: [64, 128, 256, 512]
-  crop_size: [56, 104, 200, 392]
   num_classes: 2
   image_channels: 1
   dropout: 0.1
@@ -13,15 +12,16 @@ train:
   warmup_epochs: 10
   use_bitsandbytes: False
   optim: 'adamw'
-  lr: 2e-4
+  lr: 1e-4
   device: 'cpu'
   save_path: 'weights'
   eval_epoch: 1
   log_epoch: 1
   save_epoch: 3
   log_path: 'logs'
-  early_stopping: 15
-  
+  early_stopping: 10
+  w_0: 2.5
+
 inference:
   checkpoint: 'weights\unet_34.pth'
 
@@ -29,5 +29,5 @@ overfit_one_batch:
   tolerance: 1e-5
   max_steps: 250
   overfit: False
-  hp_search: False
+  hp_search: True
   full_train: True

@@ -1,8 +1,10 @@
 unet:
   input_channels: [64, 128, 256, 512]
+  input_shape: [570, 282, 138, 66, 30, 54, 102, 198, 390]
   num_classes: 2
   image_channels: 1
   dropout: 0.1
+  use_ln: True
 
 train:
   data: 'data'
@@ -20,14 +22,15 @@ train:
   save_epoch: 3
   log_path: 'logs'
   early_stopping: 10
-  w_0: 2.5
+  w_0: 2.0
 
 inference:
-  checkpoint: 'weights\unet_34.pth'
+  checkpoint: 'weights\unet_49.pth'
 
 overfit_one_batch:
-  tolerance: 1e-5
+  tolerance: 1e-6
   max_steps: 250
-  overfit: False
-  hp_search: True
+  overfit: True
+  hp_search: False
   full_train: True
+  logging_steps: 10

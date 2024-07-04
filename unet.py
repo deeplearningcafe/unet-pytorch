@@ -29,13 +29,46 @@ class conv_relu_block(nn.Module):
             return x_activation_2, x_activation_1
 
         return x_activation_2
+    
+class conv_relu_block_ln(nn.Module):
+    def __init__(self, in_channels:int, out_channels:int, tensor_size:list[int]) -> None:
+        super(conv_relu_block_ln, self).__init__()
+        
+        self.input_channels = in_channels
+        self.output_channels = out_channels
+        # print(self.input_channels, self.output_channels)
+        # the channels are double in the first conv
+        self.conv1 = nn.Conv2d(in_channels=self.input_channels, out_channels=self.output_channels, 
+                               kernel_size=3, stride=1, padding=0)
+        self.ln1 = nn.LayerNorm([self.output_channels, *tensor_size])
+        self.conv2 = nn.Conv2d(in_channels=self.output_channels, out_channels=self.output_channels, 
+                               kernel_size=3, stride=1, padding=0)
+        # we have no padding so the dim becomes smaller each pass
+        tensor_size = [size-2 for size in tensor_size]
+        self.ln2 = nn.LayerNorm([self.output_channels, *tensor_size])
+        self.activation = nn.ReLU(inplace=True)
+
+    def forward(self, x:torch.tensor, output_activation_state:bool=False):    
+        x_activation_1 = self.activation(self.conv1(x))
+        x_norm1 = self.ln1(x_activation_1)
+        x_activation_2 = self.activation(self.conv2(x_norm1))
+        x_norm2 = self.ln2(x_activation_2)
+        
+        if output_activation_state:
+            return x_norm2, x_activation_2, x_activation_1
+
+        return x_norm2
+
 
 # contracting block
 class conv_block_pooling(nn.Module):
-    def __init__(self, in_channels:int, out_channels:int) -> None:
+    def __init__(self, in_channels:int, out_channels:int, tensor_size:list[int]=None) -> None:
         super(conv_block_pooling, self).__init__()
         
-        self.conv_block = conv_relu_block(in_channels, out_channels)
+        if tensor_size != None:
+            self.conv_block = conv_relu_block_ln(in_channels, out_channels, tensor_size)
+        else:
+            self.conv_block = conv_relu_block(in_channels, out_channels)
         self.pooling = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         
     def forward(self, x: torch.tensor, output_activation_state:bool=False):
@@ -55,10 +88,13 @@ class conv_block_pooling(nn.Module):
 
 # expansive block
 class conv_block_upsample(nn.Module):
-    def __init__(self, in_channels:int, out_channels:int) -> None:
+    def __init__(self, in_channels:int, out_channels:int, tensor_size:list[int]=None) -> None:
         super(conv_block_upsample, self).__init__()
         
-        self.conv_block = conv_relu_block(in_channels, out_channels)
+        if tensor_size != None:
+            self.conv_block = conv_relu_block_ln(in_channels, out_channels, tensor_size)
+        else:
+            self.conv_block = conv_relu_block(in_channels, out_channels)
         
         # channels are reduced in the first conv
         self.upsampling = nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, 
@@ -101,19 +137,31 @@ class Unet(nn.Module):
         self.conf = conf
         
         self.contracting = nn.ModuleList()
-        self.contracting.append(conv_relu_block(self.conf.unet.image_channels, self.conf.unet.input_channels[0]))
+        if self.conf.unet.use_ln:
+            self.contracting.append(conv_relu_block_ln(self.conf.unet.image_channels, self.conf.unet.input_channels[0], [self.conf.unet.input_shape[0]]*2))
+        else:
+            self.contracting.append(conv_relu_block(self.conf.unet.image_channels, self.conf.unet.input_channels[0]))
 
+        i = 1
         for in_channels  in self.conf.unet.input_channels:
             out_channels = in_channels*2
-            self.contracting.append(conv_block_pooling(in_channels, out_channels))
-        
+            if self.conf.unet.use_ln:
+                self.contracting.append(conv_block_pooling(in_channels, out_channels, [self.conf.unet.input_shape[i]]*2))
+            else:
+                self.contracting.append(conv_block_pooling(in_channels, out_channels))
+            i += 1
+
         self.expansive = nn.ModuleList()
         # self.expansive.append(conv_block_upsample(self.conf.unet.input_channels[-1], self.conf.unet.input_channels[-1]*2))
 
         reversed_channels = list(reversed(self.conf.unet.input_channels))
         for out_channels  in reversed_channels:
             in_channels = int(out_channels*2)
-            self.expansive.append(conv_block_upsample(in_channels, out_channels))
+            if self.conf.unet.use_ln:
+                self.expansive.append(conv_block_upsample(in_channels, out_channels, [self.conf.unet.input_shape[i]]*2))
+            else:
+                self.expansive.append(conv_block_upsample(in_channels, out_channels))
+            i += 1
 
         # self.expansive.append(conv_relu_block(reversed_channels[-1]*2, reversed_channels[-1]))
         self.final_conv = nn.Conv2d(in_channels=self.conf.unet.input_channels[0], out_channels=conf.unet.num_classes, 

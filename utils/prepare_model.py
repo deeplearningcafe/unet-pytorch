@@ -8,12 +8,12 @@ def create_scheduler(optim:torch.optim.Optimizer, conf:omegaconf.DictConfig):
     
     if scheduler_type == "warmup-cosine":
         scheduler_warmp = torch.optim.lr_scheduler.LinearLR(optim, start_factor=0.05, end_factor=1.0, total_iters=conf.train.warmup_epochs)
-        scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=conf.train.max_epochs, eta_min=conf.train.lr*5e-3)
+        scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=conf.train.max_epochs-conf.train.warmup_epochs, eta_min=conf.train.lr*5e-2)
         scheduler = torch.optim.lr_scheduler.SequentialLR(optim, schedulers=[scheduler_warmp, scheduler_cosine],
                                                           milestones=[conf.train.warmup_epochs])
     elif scheduler_type == "wsd":
         scheduler_warmup = torch.optim.lr_scheduler.LinearLR(optim, start_factor=0.05, end_factor=1.0, total_iters=conf.train.warmup_epochs)
-        scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=int(conf.train.max_epochs*0.85), eta_min=conf.train.lr*5e-3)
+        scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=int(conf.train.max_epochs*0.85), eta_min=conf.train.lr*5e-2)
         # we end the cosine at lr*1e-3 so we start the dacay by a factor of that lr, if we max is 2e-3 then we start the decay at 2e-6
         scheduler_decay = torch.optim.lr_scheduler.LinearLR(optim, start_factor=1e-3, end_factor=2e-4, total_iters=int(conf.train.max_epochs*0.15))
         scheduler =  torch.optim.lr_scheduler.SequentialLR(optim, schedulers=[scheduler_warmup, scheduler_cosine, scheduler_decay], 

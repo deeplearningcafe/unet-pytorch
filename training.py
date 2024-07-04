@@ -175,7 +175,7 @@ def train(model: torch.nn.Module,
                     val_losses += loss_mean.item()
                 
                 # save outputs img, of the last batch of validation
-                utils.visualization.plot_predictions(output.detach().cpu(), label_cpu, save_path=img_path, epoch=current_epoch)
+                utils.visualization.plot_predictions(output.detach().cpu().numpy(), label_cpu, save_path=img_path, epoch=current_epoch)
                 utils.visualization.plot_loss_weights(weight_map_numpy, loss.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch)
         
         if current_epoch % conf.train.log_epoch == 0:
@@ -247,12 +247,12 @@ def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.D
         # with torch.no_grad():
         loss *= weight_map
             
-        loss = torch.mean(loss)
-        losses.append(loss.item())
+        loss_mean = torch.mean(loss)
+        losses.append(loss_mean.item())
         
         # backward
         optim.zero_grad()
-        loss.backward()
+        loss_mean.backward()
         
         # compute norm
         grads = [
@@ -279,7 +279,7 @@ def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.D
             break
 
         if current_step % conf.overfit_one_batch.logging_steps == 0:
-            utils.visualization.plot_predictions(output.detach().cpu(), label.detach().cpu().numpy(), save_path=img_path, epoch=current_step)
+            utils.visualization.plot_predictions(output.detach().cpu().numpy(), label.detach().cpu().numpy(), save_path=img_path, epoch=current_step)
             utils.visualization.plot_loss_weights(weight_map_numpy, loss.detach().cpu().numpy(), save_path=img_path, epoch=current_step)
 
             print(f"Step {current_step}  || Loss : {losses[-1]} || Learning rate: {lrs[-1]} || Norm: {grad_norms[-1]}")
@@ -350,7 +350,7 @@ def grid_search(train_loader, val_loader, conf:omegaconf.DictConfig):
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(conf: omegaconf.DictConfig):
     model, optim, scheduler, loss_fn = prepare_training(conf)
-    print(model)
+
     train_loader, val_loader, train_data, val_data = prepare_data(conf)
     
     if conf.overfit_one_batch.hp_search:

@@ -37,7 +37,7 @@ def plot_activation_layer(activations_array: list[dict]):
                 hy, hx = torch.histogram(layer[i], density=True)
                 plt.plot(hx[:-1].detach(), hy.detach())
                 legends.append(f"{key} activation {i}")
-    plt.legend(legends);
+    plt.legend(legends)
     plt.title('activation distribution')
     plt.show()
     plt.close()
@@ -52,13 +52,13 @@ def plot_gradients(layers_list:list[str], model:torch.nn.Module):
             print('%5s %10s | mean %+f | std %e | grad:data ratio %e' % (name, tuple(param.shape), t.mean(), t.std(), t.std() / param.std()))
             hy, hx = torch.histogram(t, density=True)
             plt.plot(hx[:-1].detach(), hy.detach())
-    legends.append(f'{tuple(param.shape)} {name}')
+            legends.append(f'{tuple(param.shape)} {name}')
     plt.legend(legends)
     plt.title('weights gradient distribution')
     plt.show()
     plt.close()
 
-def plot_predictions(outputs: torch.tensor, labels:  torch.tensor, save_path:str='', epoch:int=0):
+def plot_predictions(outputs: np.ndarray, labels:  np.ndarray, save_path:str='', epoch:int=0):
 
     fig = plt.figure(figsize=(14, 16))
     
@@ -73,7 +73,7 @@ def plot_predictions(outputs: torch.tensor, labels:  torch.tensor, save_path:str
         bar = plt.colorbar(shw)
 
         ax = fig.add_subplot(4, 4, i+3)
-        output_img = torch.argmax(outputs[int(i/4)], dim=0)
+        output_img = torch.argmax(torch.from_numpy(outputs[int(i/4)]), dim=0)
 
         shw = ax.imshow(np.array(output_img))
         bar = plt.colorbar(shw)

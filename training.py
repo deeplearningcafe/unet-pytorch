@@ -218,17 +218,26 @@ def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.D
     losses = []
     grad_norms = []
     current_step = 0
-    logs = []
+    logs = {}
     lrs = []
     pbar = tqdm(total=conf.overfit_one_batch.max_steps)
     
+    img_path = os.path.join(conf.train.log_path, 'imgs')
+    img_path = os.path.join(img_path, f"{datetime.now().strftime(r'%Y%m%d-%H%M%S')}")
+    if os.path.isdir(img_path) == False:
+        os.makedirs(img_path)
+        
+    log_path = os.path.join(conf.train.log_path, f"log_output_{datetime.now().strftime(r'%Y%m%d-%H%M%S')}.csv")
+
+
     if save_update_ratio:
         diffs = {"final_conv": []}
         layers = {"final_conv": model.final_conv.weight.detach().cpu().clone()}
     
     # we just need to compute this one time
     wc = compute_weight_classes(label.detach().cpu().numpy())
-    weight_map = torch.from_numpy(compute_weight_map(label, wc)).to(conf.train.device)
+    weight_map_numpy = compute_weight_map(label, wc, w0=conf.train.w_0)
+    weight_map = torch.from_numpy(weight_map_numpy).to(conf.train.device)
 
     print("Start overfitting in one batch!")
     while current_step < conf.overfit_one_batch.max_steps:
@@ -256,7 +265,7 @@ def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.D
         lrs.append(scheduler.state_dict()['_last_lr'][0])
         
         # clip grad
-        nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0, norm_type=2)
+        nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0, norm_type=2)
         optim.step()
         scheduler.step()
 
@@ -269,10 +278,17 @@ def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.D
         if current_step > 1 and abs(losses[-2]-losses[-1]) < conf.overfit_one_batch.tolerance:
             break
 
+        if current_step % conf.overfit_one_batch.logging_steps == 0:
+            utils.visualization.plot_predictions(output.detach().cpu(), label.detach().cpu().numpy(), save_path=img_path, epoch=current_step)
+            utils.visualization.plot_loss_weights(weight_map_numpy, loss.detach().cpu().numpy(), save_path=img_path, epoch=current_step)
+
+            print(f"Step {current_step}  || Loss : {losses[-1]} || Learning rate: {lrs[-1]} || Norm: {grad_norms[-1]}")
+
+
     logs = {'losses': losses, "gradient_norm": grad_norms, "learning_rate": lrs}
     if output_log:
         df = pd.DataFrame(logs)
-        df.to_csv("log_overfitting.csv", index=False)
+        df.to_csv(log_path, index=False)
     if save_update_ratio:
         return logs, diffs
     return logs
@@ -334,7 +350,7 @@ def grid_search(train_loader, val_loader, conf:omegaconf.DictConfig):
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(conf: omegaconf.DictConfig):
     model, optim, scheduler, loss_fn = prepare_training(conf)
-    
+    print(model)
     train_loader, val_loader, train_data, val_data = prepare_data(conf)
     
     if conf.overfit_one_batch.hp_search:

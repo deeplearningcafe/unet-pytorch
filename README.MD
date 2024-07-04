@@ -15,7 +15,7 @@ This repository contains the implementation of the paper ["U-Net: Convolutional 
 
 ## Overview
 
-The U-Net architecture is designed for biomedical image segmentation. It consists of a contracting path to capture context and a symmetric expanding path that enables precise localization. This makes it particularly effective for tasks where a detailed understanding of the input image is necessary.
+The U-Net architecture is designed for biomedical image segmentation. It consists of a contracting path to capture context and a symmetric expanding path that enables precise localization. This makes it particularly effective for tasks where a detailed understanding of the input image is necessary. In the original paper they don't use layer normalization nor batch normalization, but as this techniques make training more stable and helps to achieve convergence faster, we decided to include torch LayerNorm module after each convolution layer.
 
 ## Requirements
 
@@ -56,7 +56,7 @@ To set up the environment, follow these steps:
 We use the dataset used in the paper, from EM segmentation challenge in 2015. This dataset has only 30 images, by using the Overlap-tile as in the paper, from each image we can create 4 samples, also we apply data augmentation. For validation we take 10% of the dataset, that is 3 images.
 
 ### Hyperparameter search
-In the case of using a dataset that is different from the original `WMT 2014 English-to-German` dataset, the warmup steps should be changed. By overfitting in a single batch, we can test several warmup values. To run it just change the `hp_search` variable to True inside the `config.yaml` file, the tolerance, max steps and search interval can be changed.
+By overfitting in a single batch, we can check if the model is working well if it can achieve 0 loss. To run it just change the `hp_search` variable to True inside the `config.yaml` file, the tolerance, max steps and search interval can be changed.
    ```bash
    python training.py
    ```

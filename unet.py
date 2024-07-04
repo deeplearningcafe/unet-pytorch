@@ -40,24 +40,26 @@ class conv_relu_block_ln(nn.Module):
         # the channels are double in the first conv
         self.conv1 = nn.Conv2d(in_channels=self.input_channels, out_channels=self.output_channels, 
                                kernel_size=3, stride=1, padding=0)
-        self.ln1 = nn.LayerNorm([self.output_channels, *tensor_size])
+        # self.ln1 = nn.LayerNorm([self.output_channels, *tensor_size])
+        self.ln1 = nn.BatchNorm2d(self.output_channels)
         self.conv2 = nn.Conv2d(in_channels=self.output_channels, out_channels=self.output_channels, 
                                kernel_size=3, stride=1, padding=0)
         # we have no padding so the dim becomes smaller each pass
         tensor_size = [size-2 for size in tensor_size]
-        self.ln2 = nn.LayerNorm([self.output_channels, *tensor_size])
+        # self.ln2 = nn.LayerNorm([self.output_channels, *tensor_size])
+        self.ln2 = nn.BatchNorm2d(self.output_channels)
         self.activation = nn.ReLU(inplace=True)
 
-    def forward(self, x:torch.tensor, output_activation_state:bool=False):    
-        x_activation_1 = self.activation(self.conv1(x))
-        x_norm1 = self.ln1(x_activation_1)
-        x_activation_2 = self.activation(self.conv2(x_norm1))
-        x_norm2 = self.ln2(x_activation_2)
+    def forward(self, x:torch.tensor, output_activation_state:bool=False):
+        x = self.ln1(self.conv1(x))
+        x_activation_1 = self.activation(x)
+        x = self.ln2(self.conv2(x_activation_1))
+        x_activation_2 = self.activation(x)
         
         if output_activation_state:
-            return x_norm2, x_activation_2, x_activation_1
+            return x_activation_2, x_activation_1
 
-        return x_norm2
+        return x_activation_2
 
 
 # contracting block

@@ -58,7 +58,7 @@ def plot_gradients(layers_list:list[str], model:torch.nn.Module):
     plt.show()
     plt.close()
 
-def plot_predictions(outputs: np.ndarray, labels:  np.ndarray, save_path:str='', epoch:int=0):
+def plot_predictions(outputs: np.ndarray, labels:  np.ndarray, save_path:str='', epoch:int=0, phase="val"):
 
     fig = plt.figure(figsize=(14, 16))
     
@@ -96,7 +96,10 @@ def plot_predictions(outputs: np.ndarray, labels:  np.ndarray, save_path:str='',
         # shw = ax.imshow(np.array(labels[int(i/2)]))
         # bar = plt.colorbar(shw)
     if len(save_path) > 1:
-        save_path = os.path.join(save_path, f"epoch_{epoch}.png")
+        if phase == "val":
+            save_path = os.path.join(save_path, f"epoch_{epoch}.png")
+        else:
+            save_path = os.path.join(save_path, f"epoch_{epoch}_train.png")
         plt.savefig(save_path)
     else:
         plt.show()
@@ -108,7 +111,7 @@ def plot_weight_map(weight_map:torch.tensor):
     plt.show()
     plt.close()
 
-def plot_loss_weights(weight_maps:np.ndarray, loss:np.ndarray, save_path:str='', epoch:int=0):
+def plot_loss_weights(weight_maps:np.ndarray, loss:np.ndarray, save_path:str='', epoch:int=0, phase:str="val"):
     fig = plt.figure(figsize=(10, 14))
 
     # we assume already np.ndarray
@@ -123,6 +126,22 @@ def plot_loss_weights(weight_maps:np.ndarray, loss:np.ndarray, save_path:str='',
         shw = ax.imshow(clipped_loss)
         bar = plt.colorbar(shw)
 
-    save_path = os.path.join(save_path, f"epoch_{epoch}_loss_weights.png")
+    if phase == "val":
+        save_path = os.path.join(save_path, f"epoch_{epoch}_loss_weights.png")
+    else:
+        save_path = os.path.join(save_path, f"epoch_{epoch}_loss_weights_train.png")
+
+    
+    plt.savefig(save_path)
+    plt.close()
+
+def save_samples(imgs: torch.tensor, save_path:str='', epoch:int=0, iter:int=0):
+    fig = plt.figure(figsize=(10, 14))
+    for i in range(0, 4):
+        ax = fig.add_subplot(4, 1, i+1)
+        shw = plt.imshow(np.array(imgs[i].squeeze(0)))
+        bar = plt.colorbar(shw)
+    
+    save_path = os.path.join(save_path, f"epoch_{epoch}_iter_{iter}.png")
     plt.savefig(save_path)
     plt.close()

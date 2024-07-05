@@ -7,7 +7,7 @@ def create_scheduler(optim:torch.optim.Optimizer, conf:omegaconf.DictConfig):
     scheduler_type = conf.train.scheduler_type
     
     if scheduler_type == "warmup-cosine":
-        scheduler_warmp = torch.optim.lr_scheduler.LinearLR(optim, start_factor=0.05, end_factor=1.0, total_iters=conf.train.warmup_epochs)
+        scheduler_warmp = torch.optim.lr_scheduler.LinearLR(optim, start_factor=0.005, end_factor=1.0, total_iters=conf.train.warmup_epochs)
         scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=conf.train.max_epochs-conf.train.warmup_epochs, eta_min=conf.train.lr*5e-2)
         scheduler = torch.optim.lr_scheduler.SequentialLR(optim, schedulers=[scheduler_warmp, scheduler_cosine],
                                                           milestones=[conf.train.warmup_epochs])

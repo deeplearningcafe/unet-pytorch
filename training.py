@@ -91,6 +91,7 @@ def train(model: torch.nn.Module,
     epochs = conf.train.max_epochs
     
     val_loss_weights = []
+    train_loss_weights = []
     img_path = os.path.join(conf.train.log_path, 'imgs')
     img_path = os.path.join(img_path, f"{datetime.now().strftime(r'%Y%m%d-%H%M%S')}")
     if os.path.isdir(img_path) == False:
@@ -99,8 +100,18 @@ def train(model: torch.nn.Module,
     log_path = os.path.join(conf.train.log_path, f"log_output_{datetime.now().strftime(r'%Y%m%d-%H%M%S')}.csv")
     # val_labels = []
     
+    print(f"Training args: LR{conf.train.lr} || Early stopping: {conf.train.early_stopping} || w_0: {conf.train.w_0} || Warmup epochs: {conf.train.warmup_epochs}")
+    img_list = []
+    # as we use shuffle True in the train loader, we can't precompute the weights map
     while current_epoch < epochs and current_epoch < conf.train.early_stopping:
-        for img, label in train_loader:
+        # img_path_2 = os.path.join(img_path, f"epoch_{current_epoch}")
+        # if os.path.isdir(img_path_2) == False:
+        #     os.makedirs(img_path_2)
+        for j, (img, label) in enumerate(train_loader):
+        #     utils.visualization.save_samples(img, img_path_2, epoch=current_epoch, iter=j)
+            
+        #     continue
+
             img = img.to(conf.train.device)
             label = label.to(conf.train.device)
             
@@ -110,11 +121,14 @@ def train(model: torch.nn.Module,
             # as the weigth implementation is just mult, we will compute without weight and then mult
             # in this case the reduction has to be "none" so that we can multiply by the weights            
             loss = loss_fn(output, label)
-            # with torch.no_grad():
-            wc = compute_weight_classes(label.detach().cpu().numpy())
-            # by default tensors don't have grad
-            weight_map = torch.from_numpy(compute_weight_map(label, wc, w0=conf.train.w_0)).to(conf.train.device)
-            loss *= weight_map
+            if len(train_loss_weights) == len(train_loader):
+                loss *= train_loss_weights[j]
+            else:
+                wc = compute_weight_classes(label.detach().cpu().numpy())
+                # by default tensors don't have grad
+                weight_map = torch.from_numpy(compute_weight_map(label, wc, w0=conf.train.w_0)).to(conf.train.device)
+                loss *= weight_map
+                train_loss_weights.append(weight_map)
             
             # print(loss[0])
             loss = torch.mean(loss)
@@ -138,7 +152,9 @@ def train(model: torch.nn.Module,
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0, norm_type=2)
             optimizer.step()
 
-            
+        utils.visualization.plot_predictions(output.detach().cpu().numpy(), label.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch, phase="train")
+        utils.visualization.plot_loss_weights(weight_map.detach().cpu().numpy(), loss.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch, phase="train")
+
         running_epochs += 1
         
         # we will do validation after the epoch ends
@@ -349,6 +365,7 @@ def grid_search(train_loader, val_loader, conf:omegaconf.DictConfig):
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(conf: omegaconf.DictConfig):
+    conf.unet.input_channels[:] = [channel//2 for channel in conf.unet.input_channels]
     model, optim, scheduler, loss_fn = prepare_training(conf)
 
     train_loader, val_loader, train_data, val_data = prepare_data(conf)

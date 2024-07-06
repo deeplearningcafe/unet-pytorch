@@ -19,7 +19,7 @@ def plot_logs(logs_path:str):
     ax.plot(x, df["mean_norm"],  label='mean_norm')
     ax.plot(x, df["max_norm"],  label='max_norm')
 
-    ax.plot(x, df["learning_rate"]*1000, label='lr')
+    ax.plot(x, df["learning_rate"]*20000, label='lr')
 
     ax.set(xlabel='steps', ylabel='loss and gradients',)
     ax.grid()

@@ -22,7 +22,7 @@ train:
   save_epoch: 3
   log_path: 'logs'
   early_stopping: 10
-  w_0: 2.0
+  w_0: 1.0
 
 inference:
   checkpoint: 'weights\unet_49.pth'
@@ -30,7 +30,7 @@ inference:
 overfit_one_batch:
   tolerance: 1e-6
   max_steps: 250
-  overfit: True
+  overfit: False
   hp_search: False
   full_train: True
   logging_steps: 10

@@ -56,20 +56,41 @@ def compute_weight_map(mask, w_c, w0=3.5, sigma=5):
 
 #     return wc
 
-def compute_weight_classes(mask):
-    # Initialize the weight map with zeros, same shape as mask
-    wc = np.zeros_like(mask, dtype=np.float32)
+# def compute_weight_classes(mask):
+#     # Initialize the weight map with zeros, same shape as mask
+#     wc = np.zeros_like(mask, dtype=np.float32)
     
-    # Calculate class frequencies
-    class_0 = np.sum(mask == 0) / (mask.shape[0] * mask.shape[1] * mask.shape[2])
-    class_1 = np.sum(mask == 1) / (mask.shape[0] * mask.shape[1] * mask.shape[2])
-    class_frequencies = np.array([class_0, class_1], dtype=np.float32)
+#     # Calculate class frequencies
+#     class_0 = np.sum(mask == 0) / (mask.shape[0] * mask.shape[1] * mask.shape[2])
+#     class_1 = np.sum(mask == 1) / (mask.shape[0] * mask.shape[1] * mask.shape[2])
+#     class_frequencies = np.array([class_0, class_1], dtype=np.float32)
     
-    # Assign weights based on class frequencies
-    for label, freq in enumerate(class_frequencies):
-        wc[mask == label] = 1.0 / freq if freq > 0 else 0
+#     # Assign weights based on class frequencies
+#     for label, freq in enumerate(class_frequencies):
+#         wc[mask == label] = 1.0 / freq if freq > 0 else 0
     
-    return wc
+#     return wc
+def compute_weight_classes(labels):
+    # Count the number of elements for each class
+    class_counts = torch.bincount(labels.view(-1))
+    total_count = labels.numel()
+
+    # Compute the frequency of each class
+    class_frequencies = class_counts / total_count
+
+    # Compute weights for each class
+    class_weights = 1.0 / class_frequencies
+
+    # Normalize weights to sum to 1
+    class_weights /= class_weights.sum()
+
+    # Create a tensor of weights for each element in the labels tensor
+    loss_weights = torch.zeros_like(labels, dtype=torch.float32)
+    
+    for i in range(len(class_weights)):
+        loss_weights[labels == i] = class_weights[i]
+    
+    return loss_weights
 
 def train(model: torch.nn.Module, 
             train_loader: torch.utils.data.DataLoader,
@@ -124,9 +145,9 @@ def train(model: torch.nn.Module,
             if len(train_loss_weights) == len(train_loader):
                 loss *= train_loss_weights[j]
             else:
-                wc = compute_weight_classes(label.detach().cpu().numpy())
+                wc = compute_weight_classes(label)
                 # by default tensors don't have grad
-                weight_map = torch.from_numpy(compute_weight_map(label, wc, w0=conf.train.w_0)).to(conf.train.device)
+                weight_map = compute_weight_map(label, wc, w0=conf.train.w_0)
                 loss *= weight_map
                 train_loss_weights.append(weight_map)
             
@@ -180,10 +201,10 @@ def train(model: torch.nn.Module,
                         loss *= val_loss_weights[i]
                     else:
                         # val_labels.append(label)
-                        label_cpu = label.detach().cpu().numpy()
-                        wc = compute_weight_classes(label_cpu)
-                        weight_map_numpy = compute_weight_map(label, wc, w0=conf.train.w_0)
-                        weight_map = torch.from_numpy(weight_map_numpy).to(conf.train.device)
+                        # label_cpu = label.detach().cpu().numpy()
+                        wc = compute_weight_classes(label)
+                        weight_map = compute_weight_map(label, wc, w0=conf.train.w_0)
+                        # weight_map = torch.from_numpy(weight_map_numpy).to(conf.train.device)
                         val_loss_weights.append(weight_map)
                         loss *= weight_map
 
@@ -191,8 +212,8 @@ def train(model: torch.nn.Module,
                     val_losses += loss_mean.item()
                 
                 # save outputs img, of the last batch of validation
-                utils.visualization.plot_predictions(output.detach().cpu().numpy(), label_cpu, save_path=img_path, epoch=current_epoch)
-                utils.visualization.plot_loss_weights(weight_map_numpy, loss.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch)
+                utils.visualization.plot_predictions(output.detach().cpu().numpy(), label.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch)
+                utils.visualization.plot_loss_weights(weight_map.detach().cpu().numpy(), loss.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch)
         
         if current_epoch % conf.train.log_epoch == 0:
             # we want the loss per step so we divide by the num of steps that have been accumulated
@@ -251,9 +272,9 @@ def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.D
         layers = {"final_conv": model.final_conv.weight.detach().cpu().clone()}
     
     # we just need to compute this one time
-    wc = compute_weight_classes(label.detach().cpu().numpy())
-    weight_map_numpy = compute_weight_map(label, wc, w0=conf.train.w_0)
-    weight_map = torch.from_numpy(weight_map_numpy).to(conf.train.device)
+    wc = compute_weight_classes(label)
+    weight_map = compute_weight_map(label, wc, w0=conf.train.w_0)
+    # weight_map = torch.from_numpy(weight_map_numpy).to(conf.train.device)
 
     print("Start overfitting in one batch!")
     while current_step < conf.overfit_one_batch.max_steps:
@@ -296,7 +317,7 @@ def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.D
 
         if current_step % conf.overfit_one_batch.logging_steps == 0:
             utils.visualization.plot_predictions(output.detach().cpu().numpy(), label.detach().cpu().numpy(), save_path=img_path, epoch=current_step)
-            utils.visualization.plot_loss_weights(weight_map_numpy, loss.detach().cpu().numpy(), save_path=img_path, epoch=current_step)
+            utils.visualization.plot_loss_weights(weight_map.detach().cpu().numpy(), loss.detach().cpu().numpy(), save_path=img_path, epoch=current_step)
 
             print(f"Step {current_step}  || Loss : {losses[-1]} || Learning rate: {lrs[-1]} || Norm: {grad_norms[-1]}")
 

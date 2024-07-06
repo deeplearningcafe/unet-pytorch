@@ -205,11 +205,11 @@ def prepare_data(conf:omegaconf.DictConfig):
     train_img_list, train_label_list, val_img_list, val_label_list = create_train_val_lists(conf.train.data)
     
     transforms = ImageTransforms(mean_img = 126.1648, std_img = 42.2253)
-    train_data = Segmenation_dataset(train_img_list, train_label_list, transforms, "val")
+    train_data = Segmenation_dataset(train_img_list, train_label_list, transforms, "train")
     val_data = Segmenation_dataset(val_img_list, val_label_list, transforms, "val")
     
     # in the original paper they seem to use batch 1 and each batch has 4 images, as we are using overlap tile
-    train_loader = DataLoader(train_data, batch_size=conf.train.batch_size, collate_fn=collate_fn, shuffle=False)
+    train_loader = DataLoader(train_data, batch_size=conf.train.batch_size, collate_fn=collate_fn, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=conf.train.batch_size, collate_fn=collate_fn, shuffle=False)
     
     return train_loader, val_loader, train_data, val_data

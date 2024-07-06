@@ -38,23 +38,27 @@ def compute_weight_map(mask, w_c, w0=3.5, sigma=5):
     distances_max = 25
     distances = np.clip(distances, 0, distances_max)
     # mask the positive values so that they have max distance, as small distance means higher loss
-    distances[distances==0.0] = distances_max
+    distances[distances==0.0] = distances_max-19
+    distances = torch.from_numpy(distances).to(w_c.device)
 
     # Compute the weight map
-    weight_map = w_c + w0 * np.exp(-((distances + distances) ** 2) / (2 * sigma ** 2))
-    # print(w0 * np.exp(-((distances + distances) ** 2) / (2 * sigma ** 2)))
+    weight_map = w_c + w0 * torch.exp(-((distances + distances) ** 2) / (2 * sigma ** 2))
+    print(weight_map.min(), weight_map.max(), weight_map.max()/weight_map.min())
+    
     return weight_map
 
-# def compute_weight_classes(mask):
-#     wc = torch.zeros_like(mask, dtype=torch.float32)
-#     class_0 = torch.sum(~mask)/(mask.shape[1]*mask.shape[2])
-#     class_1 = torch.sum(mask)/(mask.shape[1]*mask.shape[2])
-#     class_frequencies = torch.concat([class_0.unsqueeze(0), class_1.unsqueeze(0)], dim=0)
-#     # print(class_frequencies)
-#     for label, freq in enumerate(class_frequencies):
-#         wc[mask == label] = 1.0 / freq if freq > 0 else 0
+def compute_weight_classes(mask):
+    wc = torch.zeros_like(mask, dtype=torch.float32)
+    class_0 = torch.sum(mask == 0)/(mask.shape[0] * mask.shape[1] * mask.shape[2])
+    class_1 = torch.sum(mask)/(mask.shape[0] * mask.shape[1] * mask.shape[2])
 
-#     return wc
+    class_frequencies = torch.concat([class_0.unsqueeze(0), class_1.unsqueeze(0)], dim=0)
+
+    for label, freq in enumerate(class_frequencies):
+        wc[mask == label] = 1.0 / freq if freq > 0 else 0
+
+    wc /= wc.min()
+    return wc
 
 # def compute_weight_classes(mask):
 #     # Initialize the weight map with zeros, same shape as mask
@@ -70,27 +74,27 @@ def compute_weight_map(mask, w_c, w0=3.5, sigma=5):
 #         wc[mask == label] = 1.0 / freq if freq > 0 else 0
     
 #     return wc
-def compute_weight_classes(labels):
-    # Count the number of elements for each class
-    class_counts = torch.bincount(labels.view(-1))
-    total_count = labels.numel()
+# def compute_weight_classes(labels):
+#     # Count the number of elements for each class
+#     class_counts = torch.bincount(labels.view(-1))
+#     total_count = labels.numel()
 
-    # Compute the frequency of each class
-    class_frequencies = class_counts / total_count
+#     # Compute the frequency of each class
+#     class_frequencies = class_counts / total_count
 
-    # Compute weights for each class
-    class_weights = 1.0 / class_frequencies
+#     # Compute weights for each class
+#     class_weights = 1.0 / class_frequencies
 
-    # Normalize weights to sum to 1
-    class_weights /= class_weights.sum()
+#     # Normalize weights to sum to 1
+#     class_weights /= class_weights.min()
 
-    # Create a tensor of weights for each element in the labels tensor
-    loss_weights = torch.zeros_like(labels, dtype=torch.float32)
+#     # Create a tensor of weights for each element in the labels tensor
+#     loss_weights = torch.zeros_like(labels, dtype=torch.float32)
     
-    for i in range(len(class_weights)):
-        loss_weights[labels == i] = class_weights[i]
+#     for i in range(len(class_weights)):
+#         loss_weights[labels == i] = class_weights[i]
     
-    return loss_weights
+#     return loss_weights
 
 def train(model: torch.nn.Module, 
             train_loader: torch.utils.data.DataLoader,
@@ -112,17 +116,15 @@ def train(model: torch.nn.Module,
     epochs = conf.train.max_epochs
     
     val_loss_weights = []
-    train_loss_weights = []
+    # train_loss_weights = []
     img_path = os.path.join(conf.train.log_path, 'imgs')
     img_path = os.path.join(img_path, f"{datetime.now().strftime(r'%Y%m%d-%H%M%S')}")
     if os.path.isdir(img_path) == False:
         os.makedirs(img_path)
         
     log_path = os.path.join(conf.train.log_path, f"log_output_{datetime.now().strftime(r'%Y%m%d-%H%M%S')}.csv")
-    # val_labels = []
     
     print(f"Training args: LR{conf.train.lr} || Early stopping: {conf.train.early_stopping} || w_0: {conf.train.w_0} || Warmup epochs: {conf.train.warmup_epochs}")
-    img_list = []
     # as we use shuffle True in the train loader, we can't precompute the weights map
     while current_epoch < epochs and current_epoch < conf.train.early_stopping:
         # img_path_2 = os.path.join(img_path, f"epoch_{current_epoch}")
@@ -142,23 +144,23 @@ def train(model: torch.nn.Module,
             # as the weigth implementation is just mult, we will compute without weight and then mult
             # in this case the reduction has to be "none" so that we can multiply by the weights            
             loss = loss_fn(output, label)
-            if len(train_loss_weights) == len(train_loader):
-                loss *= train_loss_weights[j]
-            else:
-                wc = compute_weight_classes(label)
-                # by default tensors don't have grad
-                weight_map = compute_weight_map(label, wc, w0=conf.train.w_0)
-                loss *= weight_map
-                train_loss_weights.append(weight_map)
+            # if len(train_loss_weights) == len(train_loader):
+            #     loss *= train_loss_weights[j]
+            # else:
+            wc = compute_weight_classes(label)
+            # by default tensors don't have grad
+            weight_map = compute_weight_map(label, wc, w0=conf.train.w_0)
+            loss *= weight_map
+            # train_loss_weights.append(weight_map)
             
             # print(loss[0])
-            loss = torch.mean(loss)
+            loss_mean = torch.mean(loss)
             
-            train_losses += loss.item()
-            print(loss.item())
+            train_losses += loss_mean.item()
+
             # backward
             optimizer.zero_grad()
-            loss.backward()
+            loss_mean.backward()
             
             # compute norm
             grads = [
@@ -191,16 +193,8 @@ def train(model: torch.nn.Module,
                     loss = loss_fn(output, label)
                     # with torch.no_grad():
                     if len(val_loss_weights) == len(val_loader):
-                        # for i in range(len(val_loss_weights)):
-                        # wc = compute_weight_classes(label.detach().cpu().numpy())
-                        # weight_map = torch.from_numpy(compute_weight_map(label, wc)).to(conf.train.device)
-                        # print(torch.all(val_loss_weights[i][0]==weight_map[0]))
-                        # print(torch.sum(abs(val_loss_weights[i][0] - weight_map[0])))
-                        # print(torch.all(val_labels[i] == label))
-                        # print(weight_map.shape, val_loss_weights[i].shape)
                         loss *= val_loss_weights[i]
                     else:
-                        # val_labels.append(label)
                         # label_cpu = label.detach().cpu().numpy()
                         wc = compute_weight_classes(label)
                         weight_map = compute_weight_map(label, wc, w0=conf.train.w_0)

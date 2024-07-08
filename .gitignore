@@ -7,3 +7,4 @@ outputs
 *.csv
 logs/
 unet.ipynb
+data/PennFudanPed

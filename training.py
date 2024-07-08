@@ -32,7 +32,7 @@ torch.manual_seed(46)
 # data input is monochrome and labels have are 0, 1 each pixel.
 
 
-def compute_weight_map(mask, w_c, w0=3.5, sigma=5):
+def compute_weight_map(mask, w_c, w0=3.5, sigma=2.0):
     # Compute the distance transform
     distances = ndimage.distance_transform_edt(mask.detach().cpu().numpy() == 0).astype(np.float32)
     distances_max = 25
@@ -43,22 +43,31 @@ def compute_weight_map(mask, w_c, w0=3.5, sigma=5):
 
     # Compute the weight map
     weight_map = w_c + w0 * torch.exp(-((distances + distances) ** 2) / (2 * sigma ** 2))
-    print(weight_map.min(), weight_map.max(), weight_map.max()/weight_map.min())
     
     return weight_map
 
 def compute_weight_classes(mask):
+    batch_size = mask.shape[0]
     wc = torch.zeros_like(mask, dtype=torch.float32)
-    class_0 = torch.sum(mask == 0)/(mask.shape[0] * mask.shape[1] * mask.shape[2])
-    class_1 = torch.sum(mask)/(mask.shape[0] * mask.shape[1] * mask.shape[2])
+    
+    for i in range(batch_size):
+        sample_mask = mask[i]
+        
+        # Calculate the frequency of each class in the sample
+        class_0 = torch.sum(sample_mask == 0) / (sample_mask.shape[0] * sample_mask.shape[1])
+        class_1 = torch.sum(sample_mask == 1) / (sample_mask.shape[0] * sample_mask.shape[1])
 
-    class_frequencies = torch.concat([class_0.unsqueeze(0), class_1.unsqueeze(0)], dim=0)
+        class_frequencies = torch.tensor([class_0, class_1], dtype=torch.float32)
 
-    for label, freq in enumerate(class_frequencies):
-        wc[mask == label] = 1.0 / freq if freq > 0 else 0
+        # Calculate the weights for each class
+        for label, freq in enumerate(class_frequencies):
+            wc[i][sample_mask == label] = 1.0 / freq if freq > 0 else 0
 
-    wc /= wc.min()
+        # Normalize the weights so that the minimum weight is 1
+        wc[i] /= wc[i].min()
+    
     return wc
+
 
 # def compute_weight_classes(mask):
 #     # Initialize the weight map with zeros, same shape as mask
@@ -115,8 +124,7 @@ def train(model: torch.nn.Module,
     pbar = tqdm(total=conf.train.max_epochs)
     epochs = conf.train.max_epochs
     
-    val_loss_weights = []
-    # train_loss_weights = []
+    # val_loss_weights = []
     img_path = os.path.join(conf.train.log_path, 'imgs')
     img_path = os.path.join(img_path, f"{datetime.now().strftime(r'%Y%m%d-%H%M%S')}")
     if os.path.isdir(img_path) == False:
@@ -127,33 +135,25 @@ def train(model: torch.nn.Module,
     print(f"Training args: LR{conf.train.lr} || Early stopping: {conf.train.early_stopping} || w_0: {conf.train.w_0} || Warmup epochs: {conf.train.warmup_epochs}")
     # as we use shuffle True in the train loader, we can't precompute the weights map
     while current_epoch < epochs and current_epoch < conf.train.early_stopping:
-        # img_path_2 = os.path.join(img_path, f"epoch_{current_epoch}")
-        # if os.path.isdir(img_path_2) == False:
-        #     os.makedirs(img_path_2)
         for j, (img, label) in enumerate(train_loader):
-        #     utils.visualization.save_samples(img, img_path_2, epoch=current_epoch, iter=j)
-            
-        #     continue
-
             img = img.to(conf.train.device)
             label = label.to(conf.train.device)
             
             output = model(img)
             
             # compute loss
-            # as the weigth implementation is just mult, we will compute without weight and then mult
+            # as the weight implementation is just mult, we will compute without weight and then mult
             # in this case the reduction has to be "none" so that we can multiply by the weights            
             loss = loss_fn(output, label)
             # if len(train_loss_weights) == len(train_loader):
             #     loss *= train_loss_weights[j]
             # else:
             wc = compute_weight_classes(label)
+            weight_map = wc
             # by default tensors don't have grad
-            weight_map = compute_weight_map(label, wc, w0=conf.train.w_0)
+            # weight_map = compute_weight_map(label, wc, w0=conf.train.w_0)
             loss *= weight_map
-            # train_loss_weights.append(weight_map)
             
-            # print(loss[0])
             loss_mean = torch.mean(loss)
             
             train_losses += loss_mean.item()
@@ -174,9 +174,10 @@ def train(model: torch.nn.Module,
             # clip grad
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0, norm_type=2)
             optimizer.step()
-
-        utils.visualization.plot_predictions(output.detach().cpu().numpy(), label.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch, phase="train")
-        utils.visualization.plot_loss_weights(weight_map.detach().cpu().numpy(), loss.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch, phase="train")
+            # save the first sample of the batch as will have the desired shape
+            if j == 0:
+                utils.visualization.plot_predictions(output.detach().cpu().numpy(), label.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch, phase="train")
+                utils.visualization.plot_loss_weights(weight_map.detach().cpu().numpy(), loss.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch, phase="train")
 
         running_epochs += 1
         
@@ -191,23 +192,26 @@ def train(model: torch.nn.Module,
                     
                     # the validation samples are always the same and in the same order so we can store the loss weights
                     loss = loss_fn(output, label)
-                    # with torch.no_grad():
-                    if len(val_loss_weights) == len(val_loader):
-                        loss *= val_loss_weights[i]
-                    else:
-                        # label_cpu = label.detach().cpu().numpy()
-                        wc = compute_weight_classes(label)
-                        weight_map = compute_weight_map(label, wc, w0=conf.train.w_0)
-                        # weight_map = torch.from_numpy(weight_map_numpy).to(conf.train.device)
-                        val_loss_weights.append(weight_map)
-                        loss *= weight_map
+                    # if len(val_loss_weights) == len(val_loader):
+                    #     weight_map = val_loss_weights[i]
+                    #     loss *= weight_map
+                    # else:
+                    # label_cpu = label.detach().cpu().numpy()
+                    wc = compute_weight_classes(label)
+                    weight_map = wc
+                    # weight_map = compute_weight_map(label, wc, w0=conf.train.w_0)
+                    # weight_map = torch.from_numpy(weight_map_numpy).to(conf.train.device)
+                    # val_loss_weights.append(weight_map)
+                    loss *= weight_map
 
                     loss_mean = torch.mean(loss)
                     val_losses += loss_mean.item()
-                
-                # save outputs img, of the last batch of validation
-                utils.visualization.plot_predictions(output.detach().cpu().numpy(), label.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch)
-                utils.visualization.plot_loss_weights(weight_map.detach().cpu().numpy(), loss.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch)
+
+                    # save the first batch as we are sure it has all the samples
+                    if i == 0:
+                        # save outputs img, of the last batch of validation
+                        utils.visualization.plot_predictions(output.detach().cpu().numpy(), label.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch)
+                        utils.visualization.plot_loss_weights(weight_map.detach().cpu().numpy(), loss.detach().cpu().numpy(), save_path=img_path, epoch=current_epoch)
         
         if current_epoch % conf.train.log_epoch == 0:
             # we want the loss per step so we divide by the num of steps that have been accumulated
@@ -275,7 +279,6 @@ def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.D
         output = model(img)
         
         loss = loss_fn(output, label)
-        # with torch.no_grad():
         loss *= weight_map
             
         loss_mean = torch.mean(loss)
@@ -303,7 +306,7 @@ def overfit_one_batch(model, batch, optim, scheduler, loss_fn, conf: omegaconf.D
         if save_update_ratio:
             # update the change ratio
             layers, diffs = get_update_ratio(model, layers, diffs)
-        # print(diffs)
+
         current_step += 1
         pbar.update(1)
         if current_step > 1 and abs(losses[-2]-losses[-1]) < conf.overfit_one_batch.tolerance:
@@ -380,7 +383,9 @@ def grid_search(train_loader, val_loader, conf:omegaconf.DictConfig):
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(conf: omegaconf.DictConfig):
+    # delete this lane if want to use original model
     conf.unet.input_channels[:] = [channel//2 for channel in conf.unet.input_channels]
+    
     model, optim, scheduler, loss_fn = prepare_training(conf)
 
     train_loader, val_loader, train_data, val_data = prepare_data(conf)
@@ -394,6 +399,7 @@ def main(conf: omegaconf.DictConfig):
     else:
         # each time we sample from the dataset, different transforms are applied
         # and each time we loop the dataloder we get different transforms
+        conf.train.save_path = os.path.join(conf.train.save_path, f"{datetime.now().strftime(r'%Y%m%d-%H%M%S')}")
         if os.path.isdir(conf.train.save_path) == False:
             os.makedirs(conf.train.save_path)
         if os.path.isdir(conf.train.log_path) == False:

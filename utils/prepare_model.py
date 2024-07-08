@@ -71,8 +71,11 @@ def get_update_ratio(model, layers:dict[str, torch.tensor], diffs: dict[str, lis
 
 def prepare_training(conf:omegaconf.DictConfig):
     
-    model = unet.Unet(conf)
-    # torch.nn.init.kaiming_normal_(model.parameters(), nonlinearity='relu')
+    if conf.unet.padding != 0:
+        model = unet.UnetPadding(conf)
+    else:
+        model = unet.Unet(conf)
+
     model.apply(weights_init)
     model = model.to(conf.train.device)
     model.train()
@@ -83,8 +86,10 @@ def prepare_training(conf:omegaconf.DictConfig):
     return model, optim, scheduler, loss_fn
 
 def prepare_test(conf:omegaconf.DictConfig):
-    
-    model = unet.Unet(conf)
+    if conf.unet.padding != 0:
+        model = unet.UnetPadding(conf)
+    else:
+        model = unet.Unet(conf)
     net_weights = torch.load(r''.join(conf.inference.checkpoint),
                          map_location={'cuda:0': 'cpu'})
     model.load_state_dict(net_weights)

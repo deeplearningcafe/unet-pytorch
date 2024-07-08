@@ -18,8 +18,8 @@ def debug_inference(model, batch:torch.tensor):
     loss_fn = torch.nn.CrossEntropyLoss(reduction="none")
     loss = loss_fn(output, batch[1])
     with torch.no_grad():
-        wc = compute_weight_classes(batch[1].detach().cpu().numpy())
-        weight_map = torch.from_numpy(compute_weight_map(batch[1], wc)).to("cpu")
+        wc = compute_weight_classes(batch[1])
+        weight_map = compute_weight_map(batch[1], wc).to("cpu")
         loss *= weight_map
 
     loss = torch.mean(loss)
@@ -50,8 +50,9 @@ def debug_inference(model, batch:torch.tensor):
 
 @hydra.main(version_base=None, config_path=".", config_name="config")
 def main(conf:omegaconf.DictConfig):
-    # utils.visualization.plot_logs("logs\log_output_20240630-145822.csv")
+    utils.visualization.plot_logs(r"LOGS-PATH")
     conf.train.device = "cpu"
+    conf.unet.input_channels[:] = [channel//2 for channel in conf.unet.input_channels]
     model = prepare_test(conf)
     train_loader, val_loader, train_data, val_data = prepare_data(conf)
 

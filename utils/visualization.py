@@ -2,7 +2,6 @@ import torch
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from datetime import datetime
 import os
 
 def plot_logs(logs_path:str):
@@ -23,7 +22,7 @@ def plot_logs(logs_path:str):
 
     ax.set(xlabel='steps', ylabel='loss and gradients',)
     ax.grid()
-    ax.set_ylim(ymin=0, ymax=12)
+    ax.set_ylim(ymin=0, ymax=3)
     ax.legend()
     plt.show()
     
@@ -83,18 +82,6 @@ def plot_predictions(outputs: np.ndarray, labels:  np.ndarray, save_path:str='',
         shw = ax.imshow(np.array(labels[int(i/4)]))
         bar = plt.colorbar(shw)
 
-
-
-
-        # output_img = torch.argmax(outputs[int(i/2)], dim=0)
-        # ax = fig.add_subplot(4, 2, i+1)
-        # shw = ax.imshow(np.array(output_img))
-        # bar = plt.colorbar(shw)
-        
-        # ax = fig.add_subplot(4, 2, i+2)
-        
-        # shw = ax.imshow(np.array(labels[int(i/2)]))
-        # bar = plt.colorbar(shw)
     if len(save_path) > 1:
         if phase == "val":
             save_path = os.path.join(save_path, f"epoch_{epoch}.png")
